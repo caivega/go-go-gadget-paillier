@@ -73,6 +73,72 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println("Result of 15*10 after decryption: ",
-		new(big.Int).SetBytes(decryptedMul).String()) // 150
+	fmt.Println("Result of 15*10 after decryption: ", new(big.Int).SetBytes(decryptedMul).String()) // 150
+
+	for c := 0; c < 10; c++ {
+		for i := 0; i < 100; i++ {
+			fmt.Println("======================", c, i, "============================")
+			test(512, i) // when bit size <= 32, will has wrong result
+		} // recommand bit size should be 2048, reference from https://crypto.stackexchange.com/questions/44804/pailliers-cryptosystem-secure-key-size
+	}
+}
+
+func test(length int, count int) {
+	privKey, err := GenerateKey(rand.Reader, length)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	o := new(big.Int).SetInt64(0)
+	e, err := Encrypt(&privKey.PublicKey, o.Bytes())
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	for i := 0; i < count; i++ {
+		bs := make([]byte, length/8/2)
+		_, err = rand.Read(bs)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		m := new(big.Int).SetBytes(bs)
+
+		mc, err := Encrypt(&privKey.PublicKey, m.Bytes())
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		// fmt.Println(i, len(m.Bytes()), m.Bytes(), m.String(), mc)
+
+		o.Add(o, m)
+		e = AddCipher(&privKey.PublicKey, e, mc)
+	}
+
+	ms, err := Decrypt(privKey, e)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	r := new(big.Int).SetBytes(ms)
+	fmt.Println("r", len(r.Bytes()), r.Bytes(), r.String(), e)
+	fmt.Println(o.String(), r.String(), privKey.n, privKey.p, privKey.q, privKey.hp, privKey.hq, privKey.pinvq)
+	if o.Cmp(r) != 0 {
+		fmt.Println("=================")
+		fmt.Println("PublicKey.N", privKey.PublicKey.N)
+		fmt.Println("PublicKey.G", privKey.PublicKey.G)
+		fmt.Println("PublicKey.NSquared", privKey.PublicKey.NSquared)
+		fmt.Println("p", privKey.p)
+		fmt.Println("pp", privKey.pp)
+		fmt.Println("pminusone", privKey.pminusone)
+		fmt.Println("q", privKey.q)
+		fmt.Println("qq", privKey.qq)
+		fmt.Println("qminusone", privKey.qminusone)
+		fmt.Println("pinvq", privKey.pinvq)
+		fmt.Println("hp", privKey.hp)
+		fmt.Println("hq", privKey.hq)
+		fmt.Println("n", privKey.n)
+		panic("error")
+	}
 }

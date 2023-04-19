@@ -17,20 +17,32 @@ var ErrMessageTooLong = errors.New("paillier: message too long for Paillier publ
 // random source random (for example, crypto/rand.Reader).
 func GenerateKey(random io.Reader, bits int) (*PrivateKey, error) {
 	// First, begin generation of p in the background.
-	var p *big.Int
+	var p *big.Int = nil
+	var q *big.Int = nil
 	var errChan = make(chan error, 1)
 	go func() {
 		var err error
+	loop:
 		p, err = rand.Prime(random, bits/2)
-		errChan <- err
+		if err != nil {
+			errChan <- err
+		} else {
+			if q == nil {
+				goto loop
+			}
+			if p.Cmp(q) == 0 {
+				goto loop
+			}
+			errChan <- nil
+		}
 	}()
 
+	var err error
 	// Now, find a prime q in the foreground.
-	q, err := rand.Prime(random, bits/2)
+	q, err = rand.Prime(random, bits/2)
 	if err != nil {
 		return nil, err
 	}
-
 	// Wait for generation of p to complete successfully.
 	if err := <-errChan; err != nil {
 		return nil, err
@@ -52,7 +64,7 @@ func GenerateKey(random io.Reader, bits int) (*PrivateKey, error) {
 		q:         q,
 		qq:        qq,
 		qminusone: new(big.Int).Sub(q, one),
-		pinvq:     new(big.Int).ModInverse(p, q),
+		pinvq:     modr(new(big.Int), p, q),
 		hp:        h(p, pp, n),
 		hq:        h(q, qq, n),
 		n:         n,
@@ -82,10 +94,15 @@ type PublicKey struct {
 	NSquared *big.Int
 }
 
+func modr(p *big.Int, a *big.Int, b *big.Int) *big.Int {
+	p.ModInverse(a, b) // avoid return nil
+	return p
+}
+
 func h(p *big.Int, pp *big.Int, n *big.Int) *big.Int {
 	gp := new(big.Int).Mod(new(big.Int).Sub(one, n), pp)
 	lp := l(gp, p)
-	hp := new(big.Int).ModInverse(lp, p)
+	hp := modr(new(big.Int), lp, p)
 	return hp
 }
 
